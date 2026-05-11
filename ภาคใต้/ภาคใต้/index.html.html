@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport"
+content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+
+<title>ระบบตรวจสอบคุณภาพน้ำ</title>
+
+<link rel="stylesheet"
+href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+
+<script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+
+<!-- FIREBASE -->
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+
+<style>
+
+body{
+    margin:0;
+    font-family:'Segoe UI',sans-serif;
+    background:#f4f7fb;
+}
+
+#map{
+    height:100vh;
+}
+
+/* PANEL */
+
+.panel{
+
+    position:absolute;
+
+    top:20px;
+    left:20px;
+
+    width:350px;
+
+    z-index:1000;
+
+    background:rgba(255,255,255,0.96);
+
+    padding:18px;
+
+    border-radius:18px;
+
+    box-shadow:0 12px 30px rgba(0,0,0,0.25);
+}
+
+h2{
+    margin:0 0 12px;
+    color:#0d47a1;
+}
+
+/* SEARCH */
+
+input{
+
+    width:100%;
+
+    padding:12px;
+
+    border-radius:10px;
+
+    border:1px solid #ccc;
+
+    font-size:14px;
+
+    box-sizing:border-box;
+}
+
+.autocomplete{
+
+    margin-top:5px;
+
+    background:white;
+
+    border-radius:10px;
+
+    overflow:hidden;
+
+    box-shadow:0 5px 15px rgba(0,0,0,0.15);
+
+    max-height:220px;
+
+    overflow-y:auto;
+}
+
+.item{
+
+    padding:10px;
+
+    cursor:pointer;
+}
+
+.item:hover{
+
+    background:#eef4ff;
+}
+
+/* BUTTONS */
+
+.btns{
+
+    display:flex;
+
+    gap:10px;
+
+    margin-top:12px;
+}
+
+button{
+
+    flex:1;
+
+    border:none;
+
+    padding:10px;
+
+    border-radius:10px;
+
+    color:white;
+
+    font-weight:bold;
+
+    cursor:pointer;
+
+    transition:0.2s;
+}
+
+button:hover{
+
+    transform:scale(1.02);
+}
+
+.safe{
+    background:#2ecc71;
+}
+
+.danger{
+    background:#e74c3c;
+}
+
+.delete{
+    background:#616161;
+}
+
+/* INFO */
+
+.info{
+
+    margin-top:12px;
+
+    background:#f7f7f7;
+
+    padding:10px;
+
+    border-radius:10px;
+
+    font-size:13px;
+}
+
+/* METAL */
+
+#metalBox{
+
+    margin-top:12px;
+
+    display:none;
+}
+
+select{
+
+    width:100%;
+
+    padding:10px;
+
+    border-radius:10px;
+
+    border:1px solid #ccc;
+}
+
+/* TOOLTIP */
+
+.leaflet-tooltip{
+
+    border:none !important;
+
+    border-radius:10px;
+
+    padding:8px 12px;
+
+    color:white;
+
+    font-weight:bold;
+
+    font-size:13px;
+}
+
+.safeLabel{
+    background:#2ecc71;
+}
+
+.dangerLabel{
+    background:#e74c3c;
+}
+
+/* MOBILE */
+
+@media screen and (max-width:768px){
+
+    .panel{
+
+        position:fixed;
+
+        left:0;
+        right:0;
+        bottom:0;
+        top:auto;
+
+        width:100%;
+
+        max-height:55vh;
+
+        overflow-y:auto;
+
+        border-radius:22px 22px 0 0;
+
+        padding:16px;
+
+        box-sizing:border-box;
+
+        box-shadow:0 -6px 25px rgba(0,0,0,0.25);
+    }
+
+    h2{
+
+        text-align:center;
+
+        font-size:20px;
+    }
+
+    input{
+
+        font-size:16px;
+
+        padding:14px;
+    }
+
+    .autocomplete{
+
+        max-height:160px;
+    }
+
+    .item{
+
+        padding:14px;
+
+        font-size:15px;
+    }
+
+    .btns{
+
+        flex-direction:column;
+    }
+
+    button{
+
+        width:100%;
+
+        padding:14px;
+
+        font-size:15px;
+    }
+
+    .info{
+
+        font-size:14px;
+
+        line-height:1.5;
+    }
+
+    .leaflet-tooltip{
+
+        font-size:12px;
+
+        padding:6px 10px;
+    }
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div class="panel">
+
+<h2>💧 ระบบตรวจสอบคุณภาพน้ำ</h2>
+
+<input type="text"
+id="search"
+placeholder="ค้นหาจุดตรวจน้ำ...">
+
+<div id="autocomplete"
+class="autocomplete"></div>
+
+<!-- METAL -->
+
+<div id="metalBox">
+
+<label><b>ชนิดไอออนโลหะหนักที่พบ</b></label>
+
+<select id="metalSelect">
+
+<option value="Cu²⁺">Cu²⁺</option>
+<option value="Pb²⁺">Pb²⁺</option>
+<option value="Al³⁺">Al³⁺</option>
+<option value="Fe³⁺">Fe³⁺</option>
+
+</select>
+
+</div>
+
+<div class="btns">
+
+<button class="safe"
+onclick="setSafe()">
+
+✔ ปลอดภัย
+
+</button>
+
+<button class="danger"
+onclick="showDanger()">
+
+⚠ ไม่ปลอดภัย
+
+</button>
+
+<button class="delete"
+onclick="removeMarkers()">
+
+ลบทั้งหมด
+
+</button>
+
+</div>
+
+<div class="info"
+id="info">
+
+เลือกจุดตรวจน้ำก่อน
+
+</div>
+
+</div>
+
+<div id="map"></div>
+
+<script>
+
+/* =========================
+   FIREBASE
+========================= */
+
+const firebaseConfig = {
+
+  apiKey: "AIzaSyByPoPqqgub9AQFWZgDaqfrHqkWFTeeBzQ",
+
+  authDomain: "water-quality-system-9ebb1.firebaseapp.com",
+
+  databaseURL: "https://water-quality-system-9ebb1-default-rtdb.asia-southeast1.firebasedatabase.app",
+
+  projectId: "water-quality-system-9ebb1",
+
+  storageBucket: "water-quality-system-9ebb1.firebasestorage.app",
+
+  messagingSenderId: "1012147047625",
+
+  appId: "1:1012147047625:web:b5083b6573b563dc6c9118",
+
+  measurementId: "G-N61QS5JH56"
+
+};
+
+firebase.initializeApp(firebaseConfig);
+
+const db = firebase.database();
+
+/* =========================
+   MAP
+========================= */
+
+const map = L.map('map')
+.setView([9.14,99.33],10);
+
+L.tileLayer(
+'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+{
+attribution:'© OpenStreetMap'
+}).addTo(map);
+
+/* =========================
+   DATA
+========================= */
+
+const waterData = [
+
+{
+"name":"น้ำประปา พื้นที่ชุมชนห้วยทรายขาว",
+"location":"ต.บึงขุนทะเล อ.เมืองสุราษฎร์ธานี",
+"lat":8.913593,
+"lng":99.240576
+},
+
+{
+"name":"น้ำบาดาล บ้านบางคราม",
+"location":"อ.ท่าฉาง จ.สุราษฎร์ธานี",
+"lat":9.293570,
+"lng":99.020276
+},
+
+{
+"name":"น้ำจากบ่อน้ำร้อน",
+"location":"อ.กาญจนดิษฐ์ จ.สุราษฎร์ธานี",
+"lat":9.136347,
+"lng":99.498198
+},
+
+{
+"name":"น้ำสนิม ห้องวิทยาศาสตร์",
+"location":"โรงเรียนเทศบาล 4 (วัดโพธาวาส)",
+"lat":9.130731,
+"lng":99.323952
+},
+
+{
+"name":"น้ำดื่มจากตู้กดน้ำ",
+"location":"สามแยกวัดโพธิ์",
+"lat":9.129699,
+"lng":99.319936
+},
+
+{
+"name":"น้ำจากห้องวิทย์",
+"location":"โรงเรียนเทศบาล 4 (วัดโพธาวาส)",
+"lat":9.130731,
+"lng":99.323952
+},
+
+{
+"name":"น้ำจากแม่น้ำตาปี",
+"location":"บริเวณเกาะลำพู",
+"lat":9.137047,
+"lng":99.308286
+}
+
+];
+
+/* =========================
+   ELEMENTS
+========================= */
+
+const search =
+document.getElementById("search");
+
+const autocomplete =
+document.getElementById("autocomplete");
+
+const info =
+document.getElementById("info");
+
+const metalBox =
+document.getElementById("metalBox");
+
+const metalSelect =
+document.getElementById("metalSelect");
+
+let selected = null;
+
+/* =========================
+   ICON
+========================= */
+
+function createIcon(status){
+
+return L.icon({
+
+iconUrl:
+
+status==="safe"
+
+?
+
+"https://maps.google.com/mapfiles/ms/icons/green-dot.png"
+
+:
+
+"https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+
+iconSize:[35,35]
+
+});
+
+}
+
+/* =========================
+   LOAD FIREBASE MARKERS
+========================= */
+
+db.ref("markers").on("child_added",(snapshot)=>{
+
+const data = snapshot.val();
+
+const marker = L.marker(
+
+[data.lat,data.lng],
+
+{
+icon:createIcon(data.status)
+}
+
+).addTo(map);
+
+marker.bindTooltip(
+
+data.tooltip,
+
+{
+permanent:true,
+direction:"top",
+offset:[0,-15],
+
+className:
+data.status==="safe"
+? "safeLabel"
+: "dangerLabel"
+}
+
+);
+
+});
+
+/* =========================
+   SEARCH
+========================= */
+
+search.oninput = ()=>{
+
+const value =
+search.value.toLowerCase();
+
+autocomplete.innerHTML = "";
+
+if(!value) return;
+
+const results =
+waterData.filter(w=>
+
+w.name.toLowerCase()
+.includes(value)
+
+);
+
+results.forEach(w=>{
+
+const div =
+document.createElement("div");
+
+div.className = "item";
+
+div.innerHTML = `
+
+<b>${w.name}</b><br>
+<small>${w.location}</small>
+
+`;
+
+div.onclick = ()=>{
+
+selected = w;
+
+search.value = w.name;
+
+autocomplete.innerHTML = "";
+
+map.setView(
+[w.lat,w.lng],
+14
+);
+
+info.innerHTML = `
+
+<b>${w.name}</b><br>
+${w.location}
+
+`;
+
+};
+
+autocomplete.appendChild(div);
+
+});
+
+};
+
+/* =========================
+   SAFE
+========================= */
+
+function setSafe(){
+
+if(!selected){
+
+alert("กรุณาเลือกจุดตรวจน้ำก่อน");
+
+return;
+
+}
+
+metalBox.style.display = "none";
+
+const tooltip = `
+
+${selected.name}<br>
+✅ ปลอดภัย
+
+`;
+
+db.ref("markers").push({
+
+lat:selected.lat,
+lng:selected.lng,
+status:"safe",
+tooltip:tooltip
+
+});
+
+}
+
+/* =========================
+   SHOW DANGER
+========================= */
+
+function showDanger(){
+
+if(!selected){
+
+alert("กรุณาเลือกจุดตรวจน้ำก่อน");
+
+return;
+
+}
+
+metalBox.style.display = "block";
+
+createDangerMarker();
+
+}
+
+/* =========================
+   DANGER
+========================= */
+
+function createDangerMarker(){
+
+const metal =
+metalSelect.value;
+
+const tooltip = `
+
+${selected.name}<br>
+⚠ ไม่ปลอดภัย<br>
+พบ ${metal}
+
+`;
+
+db.ref("markers").push({
+
+lat:selected.lat,
+lng:selected.lng,
+status:"danger",
+tooltip:tooltip
+
+});
+
+}
+
+/* =========================
+   CHANGE METAL
+========================= */
+
+metalSelect.onchange = ()=>{
+
+if(selected){
+
+createDangerMarker();
+
+}
+
+};
+
+/* =========================
+   DELETE ALL
+========================= */
+
+function removeMarkers(){
+
+db.ref("markers").remove();
+
+location.reload();
+
+}
+
+</script>
+
+</body>
+</html>
